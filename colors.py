@@ -41,7 +41,6 @@ class Color:
 
         interp_lab = labs[0] + (labs[1] - labs[0]) * ratio
         interp_float_rgb = cv2.cvtColor(interp_lab, cv2.COLOR_LAB2RGB)[0, 0]
-        # TODO: Catch warning
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             new_rgb = img_as_ubyte(interp_float_rgb)
