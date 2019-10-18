@@ -20,7 +20,14 @@ y = Color(255, 255, 0)
 m1 = Color(39, 103, 191)
 m2 = Color(32, 175, 219)
 m3 = Color(53, 232, 206)
+
 wheel = ColorWheel({0: m1, 54: m2, 118: m3, 138: m3, 202: m2})
+darkyellow = Color(143, 152, 67)
+yellow = Color(241, 245, 82)
+darkblue = Color(0, 24, 97)
+boundary = Color(31, 58, 93)
+lighterblue = Color(26, 53, 91)
+wheel3 = ColorWheel({0:darkblue,5:boundary,10:lighterblue, 20:lighterblue, 25:boundary, 30:darkblue, 120:darkblue, 150:yellow, 195:darkyellow, 240:yellow, 270:darkblue})
 conv = lambda v: int(v * 256/360)
 
 wheel2 = ColorWheel({conv(v): c for v, c in {0: r, 60: y, 120: g, 180: c, 240: b, 300: m}.items()})
@@ -40,7 +47,7 @@ class Colorama:
 
 
 lut_list = [table_from_cmap("hsv", False),
-            wheel.generate_lookup(),
+            wheel3.generate_lookup(),
             table_from_cmap("plasma", True),
             table_from_cmap("cool", True),
             table_from_cmap("twilight_shifted", False),
@@ -80,7 +87,7 @@ class App:
 
     def __init__(self, lut_list):
         self.title = "viz"
-        self.resolution = (720, 1280)
+        self.resolution = (1280, 720)
         self.total = 0
         self.power_filter = ExpFilter(alpha_decay=0.05, alpha_rise=0.2)
         self.loud = LoudnessMax()
@@ -104,29 +111,40 @@ class App:
         return self.resolution[1]
 
     def run(self):
-        with ThreadedVideoCapture(1) as cap:
+        key_press = None
+        with ThreadedVideoCapture(0) as cap:
+            print("here")
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.y)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.x)
+            print(cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.x))
+            print(cap.read())
             while True:
-                y = np.mean(
-                    np.frombuffer(stream.read(config.FRAMES_PER_BUFFER, exception_on_overflow=False), dtype=np.int16).reshape(-1, config.CHANNELS),
-                    axis=1)/2 ** 16
-                stream.read(stream.get_read_available(), exception_on_overflow=False)
+                if stream.get_read_available():
+                    y = np.mean(
+                        np.frombuffer(stream.read(config.FRAMES_PER_BUFFER, exception_on_overflow=False), dtype=np.int16).reshape(-1, config.CHANNELS),
+                        axis=1)/2 ** 16
+                    stream.read(stream.get_read_available(), exception_on_overflow=False)
+                else:
+                    y = np.zeros((800,))
                 y = butter_bandpass_filter(y, 100, config.RATE)
+
                 power = self.loud.update(y)
                 power *= 10 ** config.GAIN
                 # print("{:4.1f} {:4.1f}".format(power, val))
                 val = self.power_filter.update(power)
-                self.total += power
-
+                if key_press == " ":
+                    self.total += 15
+                else:
+                    self.total += power
 
                 ret, frame = cap.read()
                 arr = cv2.cvtColor(frame[:, ::-1], cv2.COLOR_BGR2RGB)
-                frame = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+                frame = cv2.cvtColor(cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
                 # frame = cv2.Canny(frame, 60, 120)
                 process = (frame*self.repeat+int(self.total)).astype(np.uint8)
                 # process = np.maximum(process, cv2.Canny(frame, 60, 120))
                 out = self.lut.process_image(process)
+                out = cv2.resize(out, (1920*2, 1080*2))
+                out = cv2.GaussianBlur(out,(11,11), cv2.BORDER_DEFAULT)
                 # out = np.maximum(out, np.repeat(cv2.Canny(frame, 60, 120)[:,:,np.newaxis], 3, axis=2))
                 alpha = 1
                 # cv2.imshow("viz", cv2.cvtColor(cv2.addWeighted(arr, 1-alpha, out, alpha, 0), cv2.COLOR_BGR2RGB))
@@ -134,17 +152,17 @@ class App:
                 cv2.imshow("level", level(power, 20, size=(400, 20)))
                 cv2.imshow("level_stab", level(val, 20, size=(400, 20)))
 
-                val = chr(cv2.waitKey(5) & 0xFF)
-                if val == "q":
+                key_press = chr(cv2.waitKey(10) & 0xFF)
+                if key_press == "q":
                     cv2.destroyAllWindows()
                     break
-                elif "0" <= val <= "9":
-                    idx = (ord(val)-49) % 10
+                elif "0" <= key_press <= "9":
+                    idx = (ord(key_press)-49) % 10
                     if idx < len(self.lut_list):
                         self.cur_idx = idx
-                elif val in self.actions:
+                elif key_press in self.actions:
                     if time.time() - self.key_ready > .5:
-                        self.actions[val](self)
+                        self.actions[key_press](self)
                         self.key_ready = time.time()
 
 if __name__ == '__main__':

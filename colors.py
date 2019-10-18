@@ -100,4 +100,4 @@ class Table:
         self.table = table
 
     def process_image(self, img):
-        return self.table[img].reshape((*img.shape, self.table.shape[1]))
+        return cv2.LUT(img, self.table[None])
